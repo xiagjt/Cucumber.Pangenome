@@ -1,0 +1,13 @@
+NLR-Annotator:
+cat IDs.xls | while read line
+do
+	java -jar /home/GuanJianTao/Software/NLR-Annotator/NLR-Annotator-v2.1b.jar -i ${line}.final.fasta -x /home/GuanJianTao/Software/NLR-Annotator/src/mot.txt -y /home/GuanJianTao/Software/NLR-Annotator/src/store.txt -o ${line}.mask.genome.fa.output.txt -t 30
+done
+
+BRAKER2:
+export OPENBLAS_NUM_THREADS=1
+export GOTO_NUM_THREADS=1
+export OMP_NUM_THREADS=1
+braker.pl --cores=60 --genome=CG104.20K.fa --prot_seq=journal.pbio.3001124.s013.fasta --epmode --gff3 --min_contig=10000 --workingdir=CG104.braker.out
+
+
