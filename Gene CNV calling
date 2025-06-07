@@ -1,0 +1,5 @@
+/home/GuanJianTao/Software/miniprot/miniprot --outs=0.97 --no-cs -Iut16 CG110.final.new.fasta CLv4.Gene.pep.Reprensentative.fa > CG110.paf
+.............. all samples
+/home/GuanJianTao/Software/pangene/pangene *.paf > graph.gfa
+/home/GuanJianTao/Software/k8-1.2/k8-x86_64-Linux /home/GuanJianTao/Software/pangene/pangene.js call graph.gfa > bubble.txt
+/home/GuanJianTao/Software/k8-1.2/k8-x86_64-Linux /home/GuanJianTao/Software/pangene/pangene.js gfa2matrix graph.gfa > gene_presence_absence.Rtab
