@@ -1,4 +1,4 @@
-# Cucumber.Pangenome
+# Cucumber Pangenome
 This repository contains code for cucumber pangenome analysis, including:
 
 -Genome assembly
