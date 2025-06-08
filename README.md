@@ -7,6 +7,6 @@ This repository contains code for cucumber pangenome analysis, including:
 
 -Population variation detection
 
--GWAS and eQTL analyses
+-GWAS, eQTL, and TWAS analyses
 
 -NLR gene annotation 
