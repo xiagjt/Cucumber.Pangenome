@@ -1,0 +1,5 @@
+###### Assembly using hifiasm
+hifiasm -o CG70.hifiasm.com -t 80 /bioinfo/guanjt/PanGenome.dir/Data.dir/Buce.20231017.dir/CG70.hifi_reads.bam.fasta.gz
+awk '/^S/{print ">"$2;print $3}' CG70.hifiasm.com.bp.p_ctg.gfa > CG70.hifiasm.com.bp.p_ctg.fa
+###### Chromosome anchoring using ragtag
+ragtag.py scaffold -o CG110.ragtag.dir -f 1000 -q 10 -t 40 NearC.V1.fa /vol2/GuanJianTao/PanGenome.dir/Ragtag.dir/CG110.hifiasm.com.bp.p_ctg.fa
