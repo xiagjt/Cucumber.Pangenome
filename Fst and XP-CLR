@@ -1,0 +1,35 @@
+#### Fst
+vcftools --vcf ./merge.InDel.SNP.SV.Anno.422.filter.MAF.CG.beagle_impute.vcf --weir-fst-pop ./Indian.Samples.list --weir-fst-pop ./XIS.Samples.list --fst-window-size 20000 --fst-window-step 2000 --out ./Fst.Indian.XIS.out
+
+for f in `ls *.fst`
+do
+ awk '{if($4>=5){print $0}}' ${f} | sort -k5 -g -r - > ${f}.sort.tsv 
+done 
+
+head -n XXXX ${f}.sort.tsv > ${f}.sort.top5.tsv
+
+for f in `ls *.fst`
+do
+sort -k1,1 -k2,2n ${f}.sort.top5.tsv > ${f}.sort.top5.sort.tsv
+bedtools.static.binary merge -c 5 -o mean -i ${f}.sort.top5.sort.tsv > ${f}.sort.top5.merge.tsv
+done
+
+#### XPCLR
+for i in `echo EA.vc.EU EA.vc.Indian EA.vc.XIS EU.vc.Indian Indian.vc.XIS EU.vc.XIS`
+do
+sort -k2,2 -k3,3n ${i}.xpclr.genome.sort.top5.out | cut -f 2-4,12 > ${i}.xpclr.genome.sort.top5.sort.out
+bedtools.static.binary merge -c 4 -o mean -i ${i}.xpclr.genome.sort.top5.sort.out > ${i}.xpclr.genome.sort.top5.merge.out
+done
+
+for i in `echo EA.vc.EU EA.vc.Indian EA.vc.XIS EU.vc.Indian Indian.vc.XIS EU.vc.XIS`
+do
+cat ${i}.xpclr.chr*.out | egrep -v "^id" - | awk '{if($10>=5){print $0}}' - | sort -k12 -g -r - > ${i}.xpclr.genome.sort.out
+done
+
+head -n XXXX ${i}.xpclr.genome.sort.out > ${i}.xpclr.genome.sort.top5.out
+
+for i in `echo EA.vc.EU EA.vc.Indian EA.vc.XIS EU.vc.Indian Indian.vc.XIS EU.vc.XIS`
+do
+sort -k2,2 -k3,3n ${i}.xpclr.genome.sort.top5.out | cut -f 2-4,12 > ${i}.xpclr.genome.sort.top5.sort.out
+/home/Software.Repository/Bedtools/bedtools.static.binary merge -c 4 -o mean -i ${i}.xpclr.genome.sort.top5.sort.out > ${i}.xpclr.genome.sort.top5.merge.out
+done
