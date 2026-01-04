@@ -1,0 +1,92 @@
+orthofinder -f "$INPUT_DIR"  -o "$OUTPUT_DIR"  -t $THREADS  -a $THREADS -S diamond -M dendroblast
+
+
+Script for classification:
+
+#!/usr/bin/env python3
+"""
+"""
+
+import sys
+import pandas as pd
+import numpy as np
+
+def analyze_pangenome(gene_count_file, total_genomes):
+
+
+    df = pd.read_csv(gene_count_file, sep='\t')
+
+
+    og_presence = df.iloc[:, 1].values
+
+
+    core_threshold = total_genomes  # 100%
+    softcore_threshold = int(total_genomes * 0.95)  # 95%
+    shell_min = int(total_genomes * 0.15)  # 15%
+
+
+    core = np.sum(og_presence == core_threshold)
+    softcore = np.sum((og_presence >= softcore_threshold) & (og_presence < core_threshold))
+    shell = np.sum((og_presence >= shell_min) & (og_presence < softcore_threshold))
+    cloud = np.sum(og_presence < shell_min)
+
+    total_ogs = len(og_presence)
+
+    genome_cols = df.columns[2:]
+    total_genes = df[genome_cols].sum().sum()
+
+
+    core_mask = og_presence == core_threshold
+    softcore_mask = (og_presence >= softcore_threshold) & (og_presence < core_threshold)
+    shell_mask = (og_presence >= shell_min) & (og_presence < softcore_threshold)
+    cloud_mask = og_presence < shell_min
+
+    core_genes = df.loc[core_mask, genome_cols].sum().sum()
+    softcore_genes = df.loc[softcore_mask, genome_cols].sum().sum()
+    shell_genes = df.loc[shell_mask, genome_cols].sum().sum()
+    cloud_genes = df.loc[cloud_mask, genome_cols].sum().sum()
+
+    print("-" * 60)
+    print(f"{core_genes:6d} ({core_genes/total_genes*100:5.2f}%)")
+    print(f"{softcore_genes:6d} ({softcore_genes/total_genes*100:5.2f}%)")
+    print(f"{shell_genes:6d} ({shell_genes/total_genes*100:5.2f}%)")
+    print(f"{cloud_genes:6d} ({cloud_genes/total_genes*100:5.2f}%)")
+    print(f"{total_genes:6d} (100.00%)")
+    print("=" * 60)
+    print()
+
+
+    output_files = {
+        'core_orthogroups.txt': core_mask,
+        'softcore_orthogroups.txt': softcore_mask,
+        'shell_orthogroups.txt': shell_mask,
+        'cloud_orthogroups.txt': cloud_mask
+    }
+
+    for filename, mask in output_files.items():
+        og_ids = df.loc[mask, df.columns[0]].values
+        with open(filename, 'w') as f:
+            for og_id in og_ids:
+                f.write(f"{og_id}\n")
+
+    print()
+    print("=" * 60)
+
+if __name__ == "__main__":
+    import os
+    import glob
+
+    result_dirs = glob.glob("OrthoFinder_results/Results_*")
+    if not result_dirs:
+        sys.exit(1)
+
+    result_dir = sorted(result_dirs)[-1]
+    gene_count_file = f"{result_dir}/Orthogroups/Orthogroups.GeneCount.tsv"
+
+    if not os.path.exists(gene_count_file):
+        sys.exit(1)
+
+    df = pd.read_csv(gene_count_file, sep='\t', nrows=1)
+    total_genomes = len(df.columns) - 2 
+
+    analyze_pangenome(gene_count_file, total_genomes)
