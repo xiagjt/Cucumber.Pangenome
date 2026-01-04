@@ -1,0 +1,259 @@
+python orthogroup_analysis.py -a Orthogroups.GeneCount.tsv -b Sample.group.xls -o Out
+
+orthogroup_analysis.py:
+#!/usr/bin/env python3
+"""
+Orthogroup Classification and Statistical Analysis Script
+Usage: python orthogroup_analysis.py -a gene_count.tsv -b sample_info.tsv -o output_prefix
+Dependencies: pip install pandas
+"""
+
+import argparse
+import pandas as pd
+from collections import defaultdict
+from itertools import combinations
+
+def load_data(count_file, sample_file):
+    """Load gene count matrix and sample information"""
+    count_df = pd.read_csv(count_file, sep='\t', index_col=0)
+    sample_df = pd.read_csv(sample_file, sep='\t')
+    sample_df.columns = sample_df.columns.str.strip()
+    sample_df['Sample'] = sample_df['Sample'].str.strip()
+    sample_df['Group'] = sample_df['Group'].str.strip()
+    sample_df['Source'] = sample_df['Source'].str.strip()
+    return count_df, sample_df
+
+def check_presence(count_df, samples):
+    """Check if each Orthogroup is present in given sample set"""
+    valid_samples = [s for s in samples if s in count_df.columns]
+    if not valid_samples:
+        return pd.Series(False, index=count_df.index)
+    subset = count_df[valid_samples]
+    return (subset >= 1).any(axis=1)
+
+def analyze_alt_vs_ref(count_df, sample_df):
+    """Analyze Alt vs Ref specific Orthogroups"""
+    alt_samples = sample_df[sample_df['Source'] == 'Alt']['Sample'].tolist()
+    ref_samples = sample_df[sample_df['Source'] == 'Ref']['Sample'].tolist()
+    
+    alt_present = check_presence(count_df, alt_samples)
+    ref_present = check_presence(count_df, ref_samples)
+    
+    alt_specific = count_df.index[alt_present & ~ref_present].tolist()
+    ref_specific = count_df.index[~alt_present & ref_present].tolist()
+    shared = count_df.index[alt_present & ref_present].tolist()
+    absent_both = count_df.index[~alt_present & ~ref_present].tolist()
+    
+    results = {
+        'Alt_specific': alt_specific,
+        'Ref_specific': ref_specific,
+        'Shared': shared,
+        'Absent_both': absent_both
+    }
+
+    return results, alt_samples, ref_samples
+
+def analyze_source_groups(count_df, sample_df, source, source_label):
+    """Analyze Orthogroup distribution across different ecological groups within specified Source"""
+    if source == 'All':
+        source_samples_df = sample_df
+    else:
+        source_samples_df = sample_df[sample_df['Source'] == source]
+    
+    groups = sorted(source_samples_df['Group'].unique().tolist())
+
+    group_samples = {}
+    for g in groups:
+        samples = source_samples_df[source_samples_df['Group'] == g]['Sample'].tolist()
+        group_samples[g] = samples
+        print(f"  {g}: {len(samples)} samples")
+    
+    group_presence = {}
+    for g, samples in group_samples.items():
+        group_presence[g] = check_presence(count_df, samples)
+    
+    results = {
+        'group_specific': {},
+        'group_shared': {},
+        'all_shared': [],
+        'all_absent': []
+    }
+    
+    all_present = pd.Series(True, index=count_df.index)
+    all_absent = pd.Series(True, index=count_df.index)
+    for g in groups:
+        all_present = all_present & group_presence[g]
+        all_absent = all_absent & ~group_presence[g]
+    
+    results['all_shared'] = count_df.index[all_present].tolist()
+    results['all_absent'] = count_df.index[all_absent].tolist()
+    
+    for g in groups:
+        other_groups = [og for og in groups if og != g]
+        is_specific = group_presence[g].copy()
+        for og in other_groups:
+            is_specific = is_specific & ~group_presence[og]
+        results['group_specific'][g] = count_df.index[is_specific].tolist()
+    
+    for r in range(2, len(groups)):
+        for combo in combinations(groups, r):
+            combo_name = '_'.join(sorted(combo))
+            is_shared = pd.Series(True, index=count_df.index)
+            for g in combo:
+                is_shared = is_shared & group_presence[g]
+            for g in groups:
+                if g not in combo:
+                    is_shared = is_shared & ~group_presence[g]
+            shared_ogs = count_df.index[is_shared].tolist()
+            if shared_ogs:
+                results['group_shared'][combo_name] = shared_ogs
+    
+    return results, group_samples, group_presence, groups
+
+def write_source_group_results(output_prefix, source_tag, group_results, groups):
+    """Output ecological group analysis results for specified Source"""
+    with open(f"{output_prefix}_{source_tag}_Group_summary.tsv", 'w') as f:
+        f.write("Category\tCount\n")
+        f.write(f"All_groups_shared\t{len(group_results['all_shared'])}\n")
+        f.write(f"All_groups_absent\t{len(group_results['all_absent'])}\n")
+        for g in groups:
+            ogs = group_results['group_specific'].get(g, [])
+            f.write(f"{g}_specific\t{len(ogs)}\n")
+        for combo, ogs in group_results['group_shared'].items():
+            f.write(f"{combo}_shared\t{len(ogs)}\n")
+    
+    with open(f"{output_prefix}_{source_tag}_All_groups_shared_OGs.txt", 'w') as f:
+        f.write('\n'.join(group_results['all_shared']))
+    
+    for g, ogs in group_results['group_specific'].items():
+        with open(f"{output_prefix}_{source_tag}_{g}_specific_OGs.txt", 'w') as f:
+            f.write('\n'.join(ogs))
+    
+    for combo, ogs in group_results['group_shared'].items():
+        with open(f"{output_prefix}_{source_tag}_{combo}_shared_OGs.txt", 'w') as f:
+            f.write('\n'.join(ogs))
+
+def write_results(output_prefix, alt_ref_results, alt_group_results, ref_group_results,
+                  all_group_results, count_df, alt_groups, ref_groups, all_groups):
+    """Output all result files"""
+    
+    # 1. Alt vs Ref results
+    with open(f"{output_prefix}_Alt_vs_Ref_summary.tsv", 'w') as f:
+        f.write("Category\tCount\n")
+        for cat, ogs in alt_ref_results.items():
+            f.write(f"{cat}\t{len(ogs)}\n")
+    
+    with open(f"{output_prefix}_Alt_specific_OGs.txt", 'w') as f:
+        f.write('\n'.join(alt_ref_results['Alt_specific']))
+    
+    with open(f"{output_prefix}_Ref_specific_OGs.txt", 'w') as f:
+        f.write('\n'.join(alt_ref_results['Ref_specific']))
+    
+    with open(f"{output_prefix}_Alt_Ref_shared_OGs.txt", 'w') as f:
+        f.write('\n'.join(alt_ref_results['Shared']))
+    
+    # 2. Alt ecological group results
+    write_source_group_results(output_prefix, "Alt", alt_group_results, alt_groups)
+    
+    # 3. Ref ecological group results
+    write_source_group_results(output_prefix, "Ref", ref_group_results, ref_groups)
+    
+    # 4. All ecological group results
+    write_source_group_results(output_prefix, "All", all_group_results, all_groups)
+    
+    # 5. Detailed classification table
+    classification = []
+    for og in count_df.index:
+        row = {'Orthogroup': og}
+        
+        if og in alt_ref_results['Alt_specific']:
+            row['Alt_Ref_Category'] = 'Alt_specific'
+        elif og in alt_ref_results['Ref_specific']:
+            row['Alt_Ref_Category'] = 'Ref_specific'
+        elif og in alt_ref_results['Shared']:
+            row['Alt_Ref_Category'] = 'Shared'
+        else:
+            row['Alt_Ref_Category'] = 'Absent_both'
+        
+        for source_tag, group_results in [('Alt', alt_group_results), 
+                                           ('Ref', ref_group_results),
+                                           ('All', all_group_results)]:
+            cat = 'NA'
+            if og in group_results['all_shared']:
+                cat = 'All_groups_shared'
+            elif og in group_results['all_absent']:
+                cat = 'All_groups_absent'
+            else:
+                for g, ogs in group_results['group_specific'].items():
+                    if og in ogs:
+                        cat = f'{g}_specific'
+                        break
+                else:
+                    for combo, ogs in group_results['group_shared'].items():
+                        if og in ogs:
+                            cat = f'{combo}_shared'
+                            break
+            row[f'{source_tag}_Group_Category'] = cat
+        
+        classification.append(row)
+    
+    class_df = pd.DataFrame(classification)
+    class_df.to_csv(f"{output_prefix}_OG_classification.tsv", sep='\t', index=False)
+    
+    # 6. Cross-tabulation tables
+    for source_tag in ['Alt', 'Ref', 'All']:
+        cross = pd.crosstab(class_df['Alt_Ref_Category'], 
+                           class_df[f'{source_tag}_Group_Category'])
+        cross.to_csv(f"{output_prefix}_cross_tab_{source_tag}_groups.tsv", sep='\t')
+
+def main():
+    parser = argparse.ArgumentParser(description='Orthogroup Classification and Statistical Analysis')
+    parser.add_argument('-a', '--count', required=True, help='Gene count matrix file')
+    parser.add_argument('-b', '--sample', required=True, help='Sample classification information file')
+    parser.add_argument('-o', '--output', required=True, help='Output file prefix')
+    
+    args = parser.parse_args()
+    
+    print("Loading data...")
+    count_df, sample_df = load_data(args.count, args.sample)
+    print(f"Gene count matrix: {count_df.shape[0]} Orthogroups x {count_df.shape[1]} samples")
+    print(f"Sample information: {len(sample_df)} samples")
+    
+    count_samples = set(count_df.columns)
+    info_samples = set(sample_df['Sample'])
+    missing_in_count = info_samples - count_samples
+    missing_in_info = count_samples - info_samples
+    if missing_in_count:
+        print(f"Warning: The following samples are missing in count matrix: {missing_in_count}")
+    if missing_in_info:
+        print(f"Warning: The following samples are missing in classification info: {missing_in_info}")
+    
+    # Alt vs Ref analysis
+    alt_ref_results, alt_samples, ref_samples = analyze_alt_vs_ref(count_df, sample_df)
+    
+    # Alt ecological group analysis
+    alt_group_results, alt_group_samples, alt_group_presence, alt_groups = \
+        analyze_source_groups(count_df, sample_df, 'Alt', 'Alt(Ours)')
+    
+    # Ref ecological group analysis
+    ref_group_results, ref_group_samples, ref_group_presence, ref_groups = \
+        analyze_source_groups(count_df, sample_df, 'Ref', 'Ref(Reference)')
+    
+    # All ecological group analysis (combined Alt and Ref)
+    all_group_results, all_group_samples, all_group_presence, all_groups = \
+        analyze_source_groups(count_df, sample_df, 'All', 'All(All Materials)')
+    
+    write_results(output_prefix=args.output,
+                  alt_ref_results=alt_ref_results,
+                  alt_group_results=alt_group_results,
+                  ref_group_results=ref_group_results,
+                  all_group_results=all_group_results,
+                  count_df=count_df,
+                  alt_groups=alt_groups,
+                  ref_groups=ref_groups,
+                  all_groups=all_groups)
+    
+    print("\nAnalysis completed!")
+
+if __name__ == '__main__':
+    main()
