@@ -1,0 +1,415 @@
+#!/usr/bin/env python3
+"""
+Gene Haplotype Analysis - High Performance Version
+Optimized for large-scale datasets (10,000+ genes)
+
+Usage:
+    python haplotype_analysis_fast.py -i input.tab -o output_prefix [-p 0.05]
+"""
+
+import pandas as pd
+import numpy as np
+from scipy.stats import chi2_contingency
+from scipy.stats import false_discovery_control
+import argparse
+import sys
+import os
+from multiprocessing import Pool, cpu_count
+from functools import partial
+import time
+
+# ============================================================================
+# Parse command line arguments
+# ============================================================================
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(
+        description='Gene Haplotype Analysis - High Performance Version',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Performance optimization features:
+    - Parallel computing (multi-core)
+    - Vectorized operations
+    - Memory optimization
+    - Progress display
+
+Applicable scenarios:
+    - Number of genes > 5,000
+    - Number of samples > 100
+    - Need for fast results
+
+Examples:
+    # Use all CPU cores
+    python haplotype_analysis_fast.py -i data.tab -o results
+
+    # Specify using 4 cores
+    python haplotype_analysis_fast.py -i data.tab -o results --threads 4
+
+    # Generate core results only
+    python haplotype_analysis_fast.py -i data.tab -o results --minimal
+        """
+    )
+
+    parser.add_argument('-i', '--input', required=True, help='Input file path')
+    parser.add_argument('-o', '--output', required=True, help='Output file prefix')
+    parser.add_argument('-p', '--pvalue', type=float, default=0.05, help='P-value threshold (default: 0.05)')
+    parser.add_argument('--threads', type=int, default=None, help='Number of CPU cores to use (default: auto-detect)')
+    parser.add_argument('--minimal', action='store_true', help='Minimal output mode (no frequency tables)')
+    parser.add_argument('--no-pairwise', action='store_true', help='Skip pairwise comparisons (faster)')
+
+    args = parser.parse_args()
+
+    if not 0 < args.pvalue < 1:
+        parser.error("P-value must be between 0 and 1")
+
+    return args
+
+args = parse_arguments()
+
+# Set number of threads
+if args.threads is None:
+    n_threads = max(1, cpu_count() - 1)  # Reserve one core
+else:
+    n_threads = max(1, min(args.threads, cpu_count()))
+
+print("=" * 70)
+print("Gene Haplotype Analysis - High Performance Version")
+print("=" * 70)
+print(f"Input file: {args.input}")
+print(f"Output prefix: {args.output}")
+print(f"P-value threshold: {args.pvalue}")
+print(f"CPU cores: {n_threads} / {cpu_count()}")
+print(f"Minimal output: {args.minimal}")
+print("=" * 70)
+
+# ============================================================================
+# Utility functions
+# ============================================================================
+
+def chi_square_worker(gene_data_tuple):
+    """
+    Worker function for parallel computation
+    Returns: (gene, chi2, p_value) or None
+    """
+    gene, gene_values, group_values = gene_data_tuple
+
+    try:
+        # Create contingency table
+        contingency_table = pd.crosstab(group_values, gene_values)
+
+        # Check dimensions
+        if contingency_table.shape[0] < 2 or contingency_table.shape[1] < 2:
+            return None
+
+        # Chi-square test
+        chi2, p_value, dof, _ = chi2_contingency(contingency_table)
+        return (gene, chi2, dof, p_value)
+    except:
+        return None
+
+def pairwise_worker(args_tuple):
+    """
+    Worker function for pairwise comparison parallelization
+    """
+    gene, gene_values, group_values, group1, group2 = args_tuple
+
+    try:
+        # Filter two groups
+        mask = (group_values == group1) | (group_values == group2)
+        pair_gene = gene_values[mask]
+        pair_group = group_values[mask]
+
+        # Create contingency table
+        contingency_table = pd.crosstab(pair_group, pair_gene)
+
+        if contingency_table.shape[0] < 2 or contingency_table.shape[1] < 2:
+            return None
+
+        chi2, p_value, _, _ = chi2_contingency(contingency_table)
+        return (gene, group1, group2, chi2, p_value)
+    except:
+        return None
+
+# ============================================================================
+# 1. Read data
+# ============================================================================
+
+print("\n[1/6] Reading data...")
+start_time = time.time()
+
+if not os.path.exists(args.input):
+    print(f"Error: File does not exist: {args.input}")
+    sys.exit(1)
+
+try:
+    data = pd.read_csv(args.input, sep='\t')
+except Exception as e:
+    print(f"Error: Cannot read file: {e}")
+    sys.exit(1)
+
+if data.shape[1] < 3:
+    print("Error: Data must have at least 3 columns")
+    sys.exit(1)
+
+sample_col = data.columns[0]
+group_col = data.columns[1]
+gene_cols = data.columns[2:].tolist()
+groups = data[group_col].unique()
+
+print(f"    Samples: {len(data)}, Genes: {len(gene_cols)}, Groups: {len(groups)}")
+print(f"    Time: {time.time() - start_time:.2f}s")
+
+# ============================================================================
+# 2. Filter missing values
+# ============================================================================
+
+print("\n[2/6] Filtering genes with missing values...")
+start_time = time.time()
+
+missing_counts = data[gene_cols].isna().sum()
+genes_without_missing = missing_counts[missing_counts == 0].index.tolist()
+
+print(f"    Original genes: {len(gene_cols)}")
+print(f"    Genes after filtering: {len(genes_without_missing)}")
+print(f"    Time: {time.time() - start_time:.2f}s")
+
+if len(genes_without_missing) == 0:
+    print("Error: All genes have missing values!")
+    sys.exit(1)
+
+gene_cols = genes_without_missing
+
+# Save missing value statistics
+missing_summary = pd.DataFrame({
+    'gene': data.columns[2:],
+    'missing_count': data.iloc[:, 2:].isna().sum().values,
+    'missing_percentage': data.iloc[:, 2:].isna().sum().values / len(data) * 100
+})
+missing_summary['has_missing'] = missing_summary['missing_count'] > 0
+missing_summary = missing_summary.sort_values('missing_count', ascending=False)
+missing_summary.to_csv(f"{args.output}_missing_values_summary.txt", sep='\t', index=False)
+
+# ============================================================================
+# 3. Count haplotype types (vectorized)
+# ============================================================================
+
+print("\n[3/6] Counting haplotype types...")
+start_time = time.time()
+
+# Use vectorized operations
+count_matrix = pd.DataFrame(index=groups, columns=gene_cols)
+for group in groups:
+    group_mask = data[group_col] == group
+    count_matrix.loc[group] = data.loc[group_mask, gene_cols].nunique()
+
+count_matrix = count_matrix.astype(int)
+count_matrix.to_csv(f"{args.output}_haplotype_counts.txt", sep='\t')
+print(f"    Saved: {args.output}_haplotype_counts.txt")
+print(f"    Time: {time.time() - start_time:.2f}s")
+
+# ============================================================================
+# 4. Chi-square test (parallel computation)
+# ============================================================================
+
+print("\n[4/6] Performing chi-square test (parallel computation)...")
+start_time = time.time()
+
+# Prepare data for parallel processing
+gene_data_list = []
+for gene in gene_cols:
+    gene_values = data[gene].values
+    group_values = data[group_col].values
+    gene_data_list.append((gene, gene_values, group_values))
+
+# Parallel computation
+print(f"    Using {n_threads} CPU cores for parallel computation...")
+with Pool(n_threads) as pool:
+    results = pool.map(chi_square_worker, gene_data_list, chunksize=50)
+
+# Filter None results
+results = [r for r in results if r is not None]
+
+if len(results) == 0:
+    print("Error: No valid test results")
+    sys.exit(1)
+
+# Build results DataFrame
+chi_square_df = pd.DataFrame(results, columns=['gene', 'chi_square', 'df', 'p_value'])
+chi_square_df['p_adjusted'] = false_discovery_control(chi_square_df['p_value'].values)
+chi_square_df['significant_fdr'] = chi_square_df['p_adjusted'] < args.pvalue
+chi_square_df = chi_square_df.sort_values('p_value')
+
+chi_square_df.to_csv(f"{args.output}_chi_square_test.txt", sep='\t', index=False)
+print(f"    Saved: {args.output}_chi_square_test.txt")
+print(f"    Significant genes: {chi_square_df['significant_fdr'].sum()} / {len(chi_square_df)}")
+print(f"    Time: {time.time() - start_time:.2f}s")
+
+# ============================================================================
+# 5. Pairwise group comparison (optional, parallel computation)
+# ============================================================================
+
+if not args.no_pairwise:
+    print("\n[5/6] Performing pairwise group comparison (parallel computation)...")
+    start_time = time.time()
+
+    from itertools import combinations
+    group_pairs = list(combinations(groups, 2))
+
+    # Prepare data
+    pairwise_data_list = []
+    for gene in gene_cols:
+        gene_values = data[gene].values
+        group_values = data[group_col].values
+        for group1, group2 in group_pairs:
+            pairwise_data_list.append((gene, gene_values, group_values, group1, group2))
+
+    print(f"    Total {len(pairwise_data_list)} comparisons...")
+
+    # Parallel computation
+    with Pool(n_threads) as pool:
+        pairwise_results = pool.map(pairwise_worker, pairwise_data_list, chunksize=100)
+
+    # Filter None results
+    pairwise_results = [r for r in pairwise_results if r is not None]
+
+    if len(pairwise_results) > 0:
+        pairwise_df = pd.DataFrame(pairwise_results,
+                                   columns=['gene', 'group1', 'group2', 'chi_square', 'p_value'])
+        pairwise_df['p_adjusted'] = false_discovery_control(pairwise_df['p_value'].values)
+        pairwise_df['significant_fdr'] = pairwise_df['p_adjusted'] < args.pvalue
+        pairwise_df = pairwise_df.sort_values('p_value')
+
+        pairwise_df.to_csv(f"{args.output}_pairwise_comparison.txt", sep='\t', index=False)
+        print(f"    Saved: {args.output}_pairwise_comparison.txt")
+
+        # Summarize significant genes
+        sig_genes = pairwise_df[pairwise_df['significant_fdr']].groupby('gene').agg({
+            'p_value': ['count', 'min'],
+            'p_adjusted': 'min'
+        }).reset_index()
+        sig_genes.columns = ['gene', 'n_significant_pairs', 'min_p_value', 'min_p_adjusted']
+
+        # Add significant pair details
+        sig_pairs_detail = pairwise_df[pairwise_df['significant_fdr']].groupby('gene').apply(
+            lambda x: '; '.join([f"{row['group1']} vs {row['group2']}" for _, row in x.iterrows()])
+        ).reset_index()
+        sig_pairs_detail.columns = ['gene', 'significant_pairs']
+
+        sig_genes = sig_genes.merge(sig_pairs_detail, on='gene')
+        sig_genes = sig_genes.sort_values(['n_significant_pairs', 'min_p_adjusted'],
+                                         ascending=[False, True])
+
+        sig_genes.to_csv(f"{args.output}_significant_genes.txt", sep='\t', index=False)
+        print(f"    Saved: {args.output}_significant_genes.txt")
+        print(f"    Genes with significant differences: {len(sig_genes)}")
+
+    print(f"    Time: {time.time() - start_time:.2f}s")
+else:
+    print("\n[5/6] Skipping pairwise group comparison (--no-pairwise)")
+
+# ============================================================================
+# 6. Generate frequency tables (optional)
+# ============================================================================
+
+if not args.minimal and not args.no_pairwise:
+    print("\n[6/6] Calculating haplotype frequencies (top 20 significant genes)...")
+    start_time = time.time()
+
+    if 'sig_genes' in locals() and len(sig_genes) > 0:
+        top_genes = sig_genes['gene'].head(20).tolist()
+
+        for gene in top_genes:
+            freq_data = data.groupby([group_col, gene]).size().reset_index(name='count')
+            freq_data.columns = ['group', 'haplotype', 'count']
+
+            group_totals = freq_data.groupby('group')['count'].sum().reset_index()
+            group_totals.columns = ['group', 'total']
+
+            freq_data = freq_data.merge(group_totals, on='group')
+            freq_data['frequency'] = freq_data['count'] / freq_data['total']
+            freq_data['percentage'] = freq_data['frequency'] * 100
+
+            freq_data = freq_data.sort_values(['group', 'frequency'], ascending=[True, False])
+            freq_data.to_csv(f"{args.output}_{gene}_haplotype_frequencies.txt",
+                           sep='\t', index=False)
+
+        print(f"    Generated frequency tables for top 20 significant genes")
+        print(f"    Time: {time.time() - start_time:.2f}s")
+else:
+    print("\n[6/6] Skipping frequency table generation (--minimal mode)")
+
+# ============================================================================
+# 7. Generate summary report
+# ============================================================================
+
+print("\nGenerating summary report...")
+
+summary_lines = [
+    "=" * 70,
+    "Gene Haplotype Analysis Report - High Performance Version",
+    "=" * 70,
+    "",
+    f"Analysis date: {pd.Timestamp.now().date()}",
+    f"Input file: {args.input}",
+    "",
+    "Data overview:",
+    f"- Number of samples: {len(data)}",
+    f"- Original number of genes: {len(data.columns) - 2}",
+    f"- Genes with missing values: {len(data.columns) - 2 - len(gene_cols)}",
+    f"- Genes analyzed: {len(gene_cols)} (after filtering)",
+    f"- Number of groups: {len(groups)}",
+    f"- Group names: {', '.join(groups)}",
+    "",
+    "Performance statistics:",
+    f"- CPU cores used: {n_threads}",
+    "",
+    "Haplotype type count statistics:",
+    f"- Average haplotype types: {count_matrix.values.mean():.2f}",
+    f"- Haplotype type range: {count_matrix.values.min()} - {count_matrix.values.max()}",
+    "",
+    f"Differential test results (p < {args.pvalue}):",
+]
+
+if len(chi_square_df) > 0:
+    n_sig = chi_square_df['significant_fdr'].sum()
+    summary_lines.extend([
+        f"- Total genes tested: {len(chi_square_df)}",
+        f"- Genes with significant differences (FDR < {args.pvalue}): {n_sig}",
+        f"- Significant proportion: {n_sig/len(chi_square_df)*100:.2f}%",
+        ""
+    ])
+
+if not args.no_pairwise and 'sig_genes' in locals() and len(sig_genes) > 0:
+    summary_lines.extend([
+        "Pairwise group comparison:",
+        f"- Genes with significant differences in at least two groups: {len(sig_genes)}",
+        f"- Maximum significant pair count: {sig_genes['n_significant_pairs'].max()}",
+        ""
+    ])
+
+summary_lines.extend([
+    "Output files:",
+    f"1. {args.output}_missing_values_summary.txt - Missing value statistics",
+    f"2. {args.output}_haplotype_counts.txt - Haplotype type count matrix",
+    f"3. {args.output}_chi_square_test.txt - Chi-square test results",
+])
+
+if not args.no_pairwise:
+    summary_lines.extend([
+        f"4. {args.output}_pairwise_comparison.txt - Pairwise group comparison results",
+        f"5. {args.output}_significant_genes.txt - List of genes with significant differences",
+    ])
+    if not args.minimal:
+        summary_lines.append(f"6. {args.output}_*_frequencies.txt - Haplotype frequency tables")
+
+summary_lines.extend([
+    "",
+    "=" * 70
+])
+
+summary_report = '\n'.join(summary_lines)
+with open(f"{args.output}_summary_report.txt", 'w') as f:
+    f.write(summary_report)
+
+print(summary_report)
+print(f"\nAnalysis complete! Summary report saved to: {args.output}_summary_report.txt")
