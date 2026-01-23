@@ -11,8 +11,7 @@ Comprehensive pipeline for calling single nucleotide polymorphisms (SNPs) and sm
 - [Step 3: Joint Genotyping](#step-3-joint-genotyping)
 - [Step 4: Variant Filtering](#step-4-variant-filtering)
 - [Step 5: Functional Annotation](#step-5-functional-annotation)
-- [Complete Example Workflow](#complete-example-workflow)
-- [Quality Control](#quality-control)
+
 
 ---
 
@@ -503,16 +502,6 @@ awk 'NR>1 && $6=="exonic" {print $9}' prefix.CLv4_multianno.txt | sort | uniq -c
 awk 'NR>1 && $9=="nonsynonymous SNV"' prefix.CLv4_multianno.txt > nonsynonymous_snvs.txt
 ```
 
-**Expected Distribution:**
-```
-    15000 exonic (1-2%)
-   250000 intronic (20-25%)
-   100000 UTR5 (8-10%)
-   100000 UTR3 (8-10%)
-    50000 upstream (4-5%)
-    50000 downstream (4-5%)
-   435000 intergenic (40-50%)
-```
 
 ---
 
