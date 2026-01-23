@@ -1,7 +1,3 @@
-# Analysis Scripts Documentation
-
-This document provides detailed information and complete source code for key analysis scripts used in the Cucumber Pangenome project.
-
 ## Table of Contents
 - [Syntenic Pangenome Construction](#syntenic-pangenome-construction)
 - [Haplotype Diversity Analysis](#haplotype-diversity-analysis)
@@ -200,6 +196,384 @@ for pan_gene_key in sorted(frame_gene_dict, key=lambda x: frame_gene_dict[x][0])
 wr_out_file.close()
 ```
 
+</details>
+
+---
+
+## Defining core, softcore, dispensable, and private gene families
+**Usage:**
+```bash
+# Basic usage
+python gene_family.category.py 126species.gene.family.matrix.xls 126species.gene.family.category.xls  126species.gene.family.matrix.category.xls
+```
+
+<details>
+<summary><b>📜 Click to view complete Python script (500+ lines)</b></summary>
+
+```python
+#!/usr/bin/env python3
+import pandas as pd
+import sys
+
+def classify_gene_family(input_file, output_file, matrix_file, delimiter='\t'):
+    """
+    Classify gene families
+    
+    Parameters:
+        input_file: Input file path
+        output_file: Output file path (classification results)
+        matrix_file: Output file path (presence/absence matrix)
+        delimiter: Delimiter, default is tab
+    """
+    
+    print(f"Reading file: {input_file}")
+    
+    # Read data, preserving original column names
+    try:
+        # Try reading the first few lines to determine if there's a header
+        with open(input_file, 'r') as f:
+            first_line = f.readline().strip()
+        
+        # Determine if the first line might be a header (whether it contains numbers)
+        import re
+        has_numbers = any(char.isdigit() for char in first_line.split(delimiter)[0])
+        
+        # If no numbers, there might be a header; otherwise, no header
+        if not has_numbers:
+            df = pd.read_csv(input_file, sep=delimiter)
+            print("Header detected, will preserve original column names")
+        else:
+            df = pd.read_csv(input_file, sep=delimiter, header=None)
+            print("No header detected, using default column names")
+            
+    except Exception as e:
+        print(f"Failed to read file: {e}")
+        sys.exit(1)
+    
+    print(f"Data dimensions: {df.shape}")
+    print(f"Total gene families: {df.shape[0]}")
+    
+    # Get column names
+    if df.columns[0] == 0:  # If no header, column names are numeric indices
+        # Save original column names (indices) for matrix output
+        original_columns = list(df.columns)
+        # Extract first 4 columns of information
+        info_columns = df.iloc[:, 0:4].copy()
+        info_columns.columns = ['Gene_ID', 'Family_ID', 'Gene_Length', 'Chromosome']
+        
+        # Extract material data (5th column to end)
+        material_columns = df.iloc[:, 4:].copy()
+        # Generate friendly column names for material columns (original column index + 5)
+        material_column_names = [f'Material_{i+1}' for i in range(material_columns.shape[1])]
+        material_columns.columns = material_column_names
+    else:
+        # If there's a header, keep original column names
+        original_columns = list(df.columns)
+        # Extract first 4 columns of information, using original column names
+        info_columns = df.iloc[:, 0:4].copy()
+        if len(original_columns) >= 4:
+            info_columns.columns = original_columns[:4]
+        else:
+            info_columns.columns = ['Gene_ID', 'Family_ID', 'Gene_Length', 'Chromosome']
+        
+        # Extract material data, preserving original column names
+        material_columns = df.iloc[:, 4:].copy()
+        if len(original_columns) > 4:
+            material_column_names = original_columns[4:]
+            material_columns.columns = material_column_names
+    
+    # Count number of materials with genes for each gene family
+    presence_counts = []
+    
+    for idx, row in material_columns.iterrows():
+        # Count materials that are not "-"
+        count = (row != '-').sum()
+        presence_counts.append(count)
+    
+    # Classify based on material count
+    categories = []
+    for count in presence_counts:
+        if count == 126:
+            categories.append('core')
+        elif 114 <= count <= 125:
+            categories.append('softcore')
+        elif 2 <= count <= 113:
+            categories.append('dispensable')
+        elif count == 1:
+            categories.append('private')
+        else:  # count == 0 (theoretically shouldn't occur)
+            categories.append('unknown')
+    
+    # Create classification result dataframe
+    result_df = info_columns.copy()
+    result_df['Category'] = categories
+    
+    # Create presence/absence matrix (0 for absence, 1 for presence)
+    presence_matrix = material_columns.apply(lambda x: (x != '-').astype(int))
+    
+    # Create complete matrix dataframe, containing all original columns
+    # First create a copy of original data
+    matrix_df = df.copy()
+    
+    # Add classification column to matrix dataframe (after first 4 columns)
+    matrix_df.insert(4, 'Category', categories)
+    
+    # Count each category
+    category_counts = pd.Series(categories).value_counts()
+    print("\nClassification Statistics:")
+    print(f"  Core (126 materials):        {category_counts.get('core', 0):6d} gene families")
+    print(f"  Softcore (114-125 materials): {category_counts.get('softcore', 0):6d} gene families")
+    print(f"  Dispensable (2-113 materials):{category_counts.get('dispensable', 0):6d} gene families")
+    print(f"  Private (1 material):         {category_counts.get('private', 0):6d} gene families")
+    if 'unknown' in category_counts:
+        print(f"  Unknown:                     {category_counts.get('unknown', 0):6d} gene families")
+    
+    # Save results
+    try:
+        # Save classification results (only first 4 columns + classification column)
+        result_df.to_csv(output_file, sep='\t', index=False, header=True)
+        print(f"\nClassification results saved to: {output_file}")
+        
+        # Save complete matrix data (with all original columns and classification column)
+        matrix_df.to_csv(matrix_file, sep='\t', index=False, header=True)
+        print(f"Complete matrix data (preserving original column names) saved to: {matrix_file}")
+        
+        # Additionally save a matrix with only 0/1 values
+        presence_only_df = pd.concat([result_df, presence_matrix], axis=1)
+        presence_only_file = matrix_file.replace('.txt', '_binary.txt').replace('.tsv', '_binary.tsv').replace('.csv', '_binary.csv')
+        presence_only_df.to_csv(presence_only_file, sep='\t', index=False, header=True)
+        print(f"Binary presence/absence matrix saved to: {presence_only_file}")
+        
+    except Exception as e:
+        print(f"Failed to save files: {e}")
+        sys.exit(1)
+    
+    return result_df, matrix_df
+
+def main():
+    """
+    Main function
+    """
+    if len(sys.argv) < 4:
+        print("Usage: python script.py <input_file> <classification_output_file> <matrix_output_file> [delimiter]")
+        print("Example: python script.py gene_family_matrix.txt classified.txt matrix_output.txt")
+        print("         python script.py gene_family_matrix.csv classified.csv matrix_output.csv ','")
+        sys.exit(1)
+    
+    input_file = sys.argv[1]
+    output_file = sys.argv[2]
+    matrix_file = sys.argv[3]
+    delimiter = sys.argv[4] if len(sys.argv) > 4 else '\t'
+    
+    # Execute classification
+    classify_gene_family(input_file, output_file, matrix_file, delimiter)
+    
+    print("\nAnalysis complete!")
+
+if __name__ == "__main__":
+    main()
+```
+</details>
+
+---
+
+## Haplotype identification
+
+**Usage:**
+```bash
+# Basic usage
+python3 sequence_haplotypes.py 126species.gene.family.matrix.xls all_Samples.pep_merge.fasta 126Samples.homology.haplotype.table.xls
+```
+<details>
+<summary><b>📜 Click to view complete Python script (500+ lines)</b></summary>
+
+```python
+#!/usr/bin/env python3
+import sys
+from collections import defaultdict
+
+def parse_fasta(fasta_file):
+    """
+    Parse FASTA file, return a dictionary mapping gene IDs to sequences
+    """
+    sequences = {}
+    current_id = None
+    current_seq = []
+    
+    print(f"Reading FASTA file: {fasta_file}")
+    
+    with open(fasta_file, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            
+            if line.startswith('>'):
+                # Save previous sequence
+                if current_id is not None:
+                    sequences[current_id] = ''.join(current_seq)
+                
+                # Start new sequence, extract ID (remove >, take part before first space)
+                current_id = line[1:].split()[0]
+                current_seq = []
+            else:
+                current_seq.append(line)
+        
+        # Save last sequence
+        if current_id is not None:
+            sequences[current_id] = ''.join(current_seq)
+    
+    print(f"Total {len(sequences)} sequences read")
+    return sequences
+
+
+def assign_haplotypes(gene_ids, sequences):
+    """
+    Assign haplotype numbers to a group of genes
+    Same sequence gets same number, numbered from 1 in order of first appearance
+    """
+    seq_to_haplotype = {}
+    gene_to_haplotype = {}
+    haplotype_counter = 1
+    
+    for gene_id in gene_ids:
+        if gene_id == '-':
+            gene_to_haplotype[gene_id] = '-'
+            continue
+        
+        if gene_id not in sequences:
+            print(f"Warning: Gene {gene_id} not found in FASTA file")
+            gene_to_haplotype[gene_id] = '-'
+            continue
+        
+        seq = sequences[gene_id]
+        
+        # If sequence already seen, use existing haplotype number
+        if seq in seq_to_haplotype:
+            gene_to_haplotype[gene_id] = seq_to_haplotype[seq]
+        else:
+            # New sequence, assign new haplotype number
+            seq_to_haplotype[seq] = haplotype_counter
+            gene_to_haplotype[gene_id] = haplotype_counter
+            haplotype_counter += 1
+    
+    return gene_to_haplotype
+
+
+def process_gene_family_matrix(matrix_file, fasta_file, output_file):
+    """
+    Process gene family matrix file for haplotype analysis
+    """
+    # Read all sequences
+    sequences = parse_fasta(fasta_file)
+    
+    print(f"\nReading gene family matrix: {matrix_file}")
+    
+    # Read matrix file
+    with open(matrix_file, 'r') as f:
+        lines = [line.strip() for line in f if line.strip()]
+    
+    # Parse header
+    header = lines[0].split('\t')
+    sample_names = header[4:]  # First 4 columns: Reference genome ID, GroupID, Gene length, Chromosome info
+    
+    print(f"Total {len(sample_names)} samples")
+    print(f"Total {len(lines)-1} genomes")
+    
+    # Prepare output results
+    output_lines = []
+    output_header = ['GeneID'] + sample_names
+    output_lines.append('\t'.join(output_header))
+    
+    # Process each genome
+    for idx, line in enumerate(lines[1:], 1):
+        fields = line.split('\t')
+        
+        if len(fields) < 5:
+            print(f"Warning: Line {idx+1} incomplete, skipping")
+            continue
+        
+        ref_gene_id = fields[0]
+        group_id = fields[1]
+        gene_length = fields[2]
+        chromosome = fields[3]
+        gene_ids = fields[4:]
+        
+        # Ensure gene ID count matches sample count
+        if len(gene_ids) != len(sample_names):
+            print(f"Warning: Group {group_id} gene count doesn't match sample count")
+            continue
+        
+        # Process multiple gene IDs (comma-separated), take only the first
+        processed_gene_ids = []
+        for gene_id in gene_ids:
+            if gene_id == '-':
+                processed_gene_ids.append('-')
+            elif ',' in gene_id:
+                # If multiple gene IDs, take only the first
+                first_gene = gene_id.split(',')[0]
+                processed_gene_ids.append(first_gene)
+            else:
+                processed_gene_ids.append(gene_id)
+        
+        # Collect all valid gene IDs for this group (including reference gene)
+        all_genes = [ref_gene_id] + [g for g in processed_gene_ids if g != '-']
+        
+        # Assign haplotypes
+        gene_to_haplotype = assign_haplotypes(all_genes, sequences)
+        
+        # Build output line
+        haplotypes = []
+        for gene_id in processed_gene_ids:
+            if gene_id == '-':
+                haplotypes.append('-')
+            else:
+                haplotypes.append(str(gene_to_haplotype.get(gene_id, '-')))
+        
+        output_line = [ref_gene_id] + haplotypes
+        output_lines.append('\t'.join(output_line))
+        
+        if idx % 1000 == 0:
+            print(f"Processed {idx} genomes...")
+    
+    # Write output file
+    print(f"\nWriting results to: {output_file}")
+    with open(output_file, 'w') as f:
+        f.write('\n'.join(output_lines))
+    
+    print(f"Done! Total {len(output_lines)-1} genomes processed")
+
+
+def main():
+    if len(sys.argv) != 4:
+        print("Usage: python3 sequence_haplotypes.py <gene_family_matrix> <fasta_file> <output_file>")
+        print("\nParameters:")
+        print("  gene_family_matrix: Gene family matrix file")
+        print("  fasta_file: FASTA file containing all gene protein sequences")
+        print("  output_file: Output haplotype matrix file")
+        sys.exit(1)
+    
+    matrix_file = sys.argv[1]
+    fasta_file = sys.argv[2]
+    output_file = sys.argv[3]
+    
+    print("="*60)
+    print("Homologous Gene Haplotype Analysis")
+    print("="*60)
+    
+    try:
+        process_gene_family_matrix(matrix_file, fasta_file, output_file)
+        print("\nAnalysis complete!")
+    except Exception as e:
+        print(f"\nError: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
+```
 </details>
 
 ---
