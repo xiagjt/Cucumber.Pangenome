@@ -1,4 +1,4 @@
-This pipeline is designed for the high-throughput identification of **Centromeric Regions** across a pangenome scale (130 samples) using sequence alignment, distance-based merging, and length-based filtering.
+This pipeline is designed for the high-throughput identification of **Centromeric Regions** across a pangenome scale (133 samples) using sequence alignment, distance-based merging, and length-based filtering.
 
 ---
 
@@ -21,7 +21,7 @@ conda activate centromere_env
 
 ## 2. BLAST Database Construction
 
-We iterate through all 130 genome assemblies in the pangenome directory to create individual nucleotide BLAST databases.
+We iterate through all 133 genome assemblies in the pangenome directory to create individual nucleotide BLAST databases.
 
 <details>
 <summary>Click to expand: make_blastdb.sh</summary>
