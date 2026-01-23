@@ -1,7 +1,5 @@
-# Orthogroup Classification and Statistical Analysis
-
 ## Overview
-Classify orthogroups based on presence-absence patterns across different sample groups and sources (Alt vs Ref), and perform comprehensive statistical analysis.
+Identify specific and shared gene families based on syntenic pangenome.
 
 ## Table of Contents
 - [Installation](#installation)
