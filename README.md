@@ -10,3 +10,8 @@ This repository contains code for cucumber pangenome analysis, including:
 -GWAS, eQTL, and TWAS analyses
 
 -NLR gene annotation 
+
+
+
+License
+Custom analysis scripts and computational pipelines developed are publicly available under the MIT License.
