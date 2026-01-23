@@ -248,7 +248,7 @@ This repository contains scripts for the following analyses:
 ---
 
 ### 8. Gene-based Pangenome Analysis
-**Script:** `Syntenic pangenome`, `Haplotype diversity`, `Haplotype frequency comparison`
+**Script:** `Syntenic pangenome`
 
 **Purpose:** Construct syntenic pangenome and classify gene families as well as haplotype analysis
 
