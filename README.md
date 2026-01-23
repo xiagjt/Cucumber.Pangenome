@@ -321,6 +321,12 @@ This repository contains scripts for the following analyses:
 - Colocalization analysis with COLOC
 - Identification of causal variants (H4 posterior probability > 0.50)
 
+### 14. Hi-C heatmap plot of CG88 for validating the large inversions
+**Script:** `Hi-C heatmap`
+
+---
+
+
 ## Usage Examples
 
 ### Example 1: Genome Assembly
