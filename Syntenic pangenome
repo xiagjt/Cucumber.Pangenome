@@ -1,0 +1,156 @@
+##Perfomr all vs all protein alignment for 126 pangenomes including reference genome
+diamond blastp -q DDD.pep.fa -d ${i}.pep.fa -o DDD${i}_results.txt -e 1 -f 6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore stitle -k 1 -p 80
+## Syntenic pagenome construction
+# The installation pipline of mSynOths is at gitee(https://gitee.com/zhanglingkui/msynorths/)
+
+# Identification of synteny gene families
+python ~/180T/msynorths_gitee/mSynOrths.py -t 60 -o Cucum_137_0110 -m 0.8 -v 0.5 -i 85  -f genome_pos.txt -c 
+
+#bulit gene-level pangenome for cucumber genomes
+python bulit_pangenome.py -m Cucum_137_0110 -o Cucum_137_0110_pangene.txt
+
+
+
+bulit_pangenome.py:
+# -*- coding=utf-8 -*-
+import sys
+import os
+import argparse
+import re
+parser = argparse.ArgumentParser(description='pangenome')
+parser.add_argument('-m', type=str, help='output folder of mSynOrths')
+parser.add_argument('-f', type=str, default='mSynF1', help='choose frame of  pan genome ')
+parser.add_argument('-o', type=str, default='pangenome.txt', help='output file')
+# parser.add_argument('-c', "--continuedo", action='store_true',)
+args = parser.parse_args()
+msyn_fold,frame_fold,out_file=args.m,args.f,args.o
+
+# species num. of mSynOrths
+msynf_num=0
+# To find the longest gene as representative
+total_gene_length_dict={}
+# The list dictionary of all genes was constructed to be used to facilitate subsequent queries of upstream and downstream genes
+total_gene_list_dict={}
+for i in os.listdir(msyn_fold):
+    if i.startswith('mSynF'):
+        msynf_num+=1
+        op_file=open(msyn_fold+'/'+i+'/species.gff_pos')
+        index=0
+        total_gene_list_dict[i[5:]]=[]
+        for line in op_file:
+            index+=1
+            line_list=line.strip().split('\t')
+            total_gene_length_dict[line_list[0]]=int(line_list[2])
+            total_gene_list_dict[i[5:]].append(line_list[0])
+        op_file.close()
+
+
+frame_gene_list=[]
+frame_fold_path=msyn_fold+'/'+frame_fold+'/'
+frame_file=frame_fold_path+'species.gff_pos_DelTandem'
+op_frame_file=open(frame_file,'r')
+frame_gene_dict={}
+index=0
+for line in op_frame_file:
+    index+=1
+    line_list=line.strip().split('\t')
+    frame_gene_list.append(line_list[0])
+    # index length chr
+    frame_gene_dict[line_list[0]]=[index,int(line_list[2]),line_list[3]]
+op_frame_file.close()
+
+frame_num=frame_fold[5:]
+# bulit a dict containing all synteninc gene with frame gene,
+total_syn_frame_dict={}
+for i in os.listdir(msyn_fold):
+    if i.startswith('mSynF'):
+        if int(i[5:])<int(frame_num):
+            for x in os.listdir(msyn_fold+'/'+i):
+                if x.endswith('syn.seg'):
+                    if re.findall('\d+',x)[1]==frame_num:
+                        op_file=open(msyn_fold+'/'+i+'/'+x,'r')
+                        for line in op_file:
+                            if line.startswith('##'):
+                                continue
+                            line_list=line.strip().split('\t')
+                            total_syn_frame_dict[line_list[0]]=line_list[1]
+                        op_file.close()
+        elif int(i[5:])==int(frame_num):
+            for x in os.listdir(msyn_fold+'/'+i):
+                if x.endswith('syn.seg'):
+                    op_file=open(msyn_fold+'/'+i+'/'+x,'r')
+                    for line in op_file:
+                        if line.startswith('##'):
+                            continue
+                        line_list=line.strip().split('\t')
+                        total_syn_frame_dict[line_list[1]]=line_list[0]
+                    op_file.close()
+
+msyn_file=msyn_fold+'/Total_species_syntenic_gene_pairs.txt'
+index=0
+op_msyn_file=open(msyn_file,'r')
+for line in op_msyn_file:
+    line_list=line.strip().split('\t')
+    line_dict={}
+    for i in range(1,msynf_num+1):
+        line_dict[str(i)]=[]
+    num_index=0
+    for i in line_list:
+        # if i.split(':')[0]=='9':
+        #     continue
+        ad_list=i[len(i.split(':')[0])+1:].split(',')
+        ad_list.remove('')
+        num_index+=1
+        line_dict[i.split(':')[0]]=ad_list
+    # filter out synteinc gene family with species num.  fewer than 2
+    # if num_index<2:
+    #     continue
+    #  frame gene in syntenic gene family
+    if len(line_dict[frame_num])>0:
+        sort_gene_list=sorted(line_dict[frame_num],key=lambda x:frame_gene_dict[x][1],reverse=True)
+        frame_gene=sort_gene_list[0]
+        frame_gene_dict[frame_gene].append(line_dict)
+    # find a longest gene as representive(frame gene)
+    else:
+        big_length=0
+        big_gene=''
+        big_key=''
+        for key,value in line_dict.items():
+            if len(value)>0:
+                for gene_id in value:
+                    if total_gene_length_dict[gene_id]>big_length:
+                        big_length=total_gene_length_dict[gene_id]
+                        big_gene=gene_id
+                        big_key=key
+        big_gene_index=total_gene_list_dict[big_key].index(big_gene)
+        for flank_gene in total_gene_list_dict[big_key][big_gene_index::]:
+            if flank_gene in total_syn_frame_dict.keys():
+                add_index=frame_gene_dict[total_syn_frame_dict[flank_gene]][0]+0.1
+                add_chr=frame_gene_dict[total_syn_frame_dict[flank_gene]][2]
+                frame_gene_dict[big_gene]=[add_index,big_length,add_chr,line_dict]
+                break
+op_msyn_file.close()
+wr_out_file=open(out_file,'w')
+for pan_gene_key in sorted(frame_gene_dict, key=lambda x:frame_gene_dict[x][0]):
+    pan_gene_line=frame_gene_dict[pan_gene_key]
+    if len(pan_gene_line)>3:
+        wr_out_file.write(pan_gene_key+'\t')
+        for pan_gene in pan_gene_line[:3]:
+            wr_out_file.write(str(pan_gene)+'\t')
+        if len(pan_gene_line)>3:
+            for i in range(1,int(msynf_num)+1):
+                #print(i,pan_gene_line)
+                if len(pan_gene_line[-1][str(i)])>1:
+                    for x in pan_gene_line[-1][str(i)]:
+                        wr_out_file.write(x+',')
+                elif len(pan_gene_line[-1][str(i)])==1:
+                    wr_out_file.write(pan_gene_line[-1][str(i)][0])
+                else:
+                    wr_out_file.write('-')
+                wr_out_file.write('\t')
+            wr_out_file.write('\n')
+    # else:
+    #     wr_out_file.write('\n')
+
+
+
