@@ -1,3 +1,0 @@
-BuildDatabase -name CG104 CG104.Nuclear.Add.fa
-RepeatModeler -pa 60 -LTRStruct -ninja_dir /home/GuanJianTao/Software/NINJA-0.95-cluster_only/NINJA -rmblast_dir /home/GuanJianTao/micromamba/envs/repeatmodeler/bin/ -trf_dir /home/GuanJianTao/micromamba/envs/repeatmodeler/bin/ -database CG104
-RepeatMasker -lib CG104-families.fa -pa 30 -html -gff -dir Masker.out CG104.Nuclear.Add.fa
