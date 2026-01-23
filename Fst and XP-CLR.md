@@ -1,4 +1,4 @@
-This section details the **Selection Analysis** used to identify selective sweeps and genomic regions under pressure during cucumber evolution or domestication. We employ two complementary statistics: **** (Fixation Index) and **XP-CLR** (Cross-Population Composite Likelihood Ratio).
+This section details the **Selection Analysis** used to identify selective sweeps and genomic regions under pressure during cucumber evolution or domestication. We employ two complementary statistics: **Fst**  and **XP-CLR** (Cross-Population Composite Likelihood Ratio).
 
 ---
 
@@ -19,7 +19,7 @@ conda activate selection_env
 
 ---
 
-## 2.  (Fixation Index) Analysis
+## 2.  Fst Analysis
 
  is used to measure genetic differentiation between populations. High  values indicate regions potentially under divergent selection.
 
