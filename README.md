@@ -30,7 +30,7 @@ This pipeline integrates multiple bioinformatics tools for comprehensive cucumbe
 - **Structural variant (SV) detection** and graph-based pangenome construction
 - **SNP/InDel calling and annotation** from whole-genome resequencing data
 - **Gene and repeat annotation** with functional classification
-- **Pan-genome gene analysis** including core/dispensable gene identification
+- **Syntenic pan-genome gene analysis** including core/dispensable gene identification
 - **Gene-level PAV and CNV detection** across populations
 - **Population genetics** including phylogenetics, FST, and selection scans
 - **GWAS and eQTL analysis** for trait-associated variant identification
@@ -248,9 +248,9 @@ This repository contains scripts for the following analyses:
 ---
 
 ### 8. Gene-based Pangenome Analysis
-**Script:** `Gene-based pangenome`
+**Script:** `Syntenic pangenome`, `Haplotype diversity`, `Haplotype frequency comparison`
 
-**Purpose:** Construct syntenic pangenome and classify gene families
+**Purpose:** Construct syntenic pangenome and classify gene families as well as haplotype analysis
 
 **Key Steps:**
 - Syntenic gene family clustering using mSynOrths
@@ -285,43 +285,8 @@ This repository contains scripts for the following analyses:
 
 ---
 
-### 11. Homologous Group Determination
-**Script:** `Homologous group determination`
 
-**Purpose:** Cluster genes into homologous groups across genomes
-
-**Key Steps:**
-- All-vs-all protein comparison with DIAMOND
-- Homologous group clustering
-- Synteny-based validation
-
----
-
-### 12. Haplotype Diversity Analysis
-**Script:** `Haplotype diversity`
-
-**Purpose:** Analyze haplotype diversity within and between populations
-
-**Key Steps:**
-- Haplotype phasing and reconstruction
-- Diversity metrics calculation
-- Population-specific haplotype identification
-
----
-
-### 13. Haplotype Frequency Comparison
-**Script:** `Haplotype frequency comparison`
-
-**Purpose:** Compare haplotype frequencies across geographical groups
-
-**Key Steps:**
-- Frequency calculation for each haplotype
-- Statistical testing for frequency differences
-- Identification of differentiated haplotypes
-
----
-
-### 14. NLR Annotation
+### 11. NLR Annotation
 **Script:** `NLR annotation`
 
 **Purpose:** Identify and classify nucleotide-binding leucine-rich repeat (NLR) resistance genes
@@ -333,7 +298,7 @@ This repository contains scripts for the following analyses:
 
 ---
 
-### 15. GWAS and eQTL Analysis
+### 12. GWAS and eQTL Analysis
 **Script:** `GWAS and eQTL`
 
 **Purpose:** Perform genome-wide association studies and expression QTL mapping
@@ -346,7 +311,7 @@ This repository contains scripts for the following analyses:
 
 ---
 
-### 16. TWAS and GWAS-eQTL Colocalization
+### 13. TWAS and GWAS-eQTL Colocalization
 **Script:** `TWAS and GWAS-eQTL Colocalization`
 
 **Purpose:** Integrate transcriptome with genome-wide association results
