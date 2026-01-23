@@ -482,7 +482,7 @@ under review
 
 For questions and feedback:
 - **GitHub Issues:** https://github.com/xiagjt/Cucumber.Pangenome/issues
-- **Corresponding Author:** [Jiantao Guan, guanjiantao@caas.cn]
+- **Corresponding Author:** Jiantao Guan, guanjiantao@caas.cn
 
 ## Acknowledgments
 
