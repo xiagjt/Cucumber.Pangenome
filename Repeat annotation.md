@@ -61,6 +61,14 @@ The output files will be generated in the specified directories, with HTML and G
 
 This project is licensed under the MIT License. See the LICENSE file for details.
 
+
+## Citation
+If you use this pipeline in your research, please cite:
+
+RepeatModeler: http://www.repeatmasker.org/RepeatModeler/
+
+RepeatMasker: http://www.repeatmasker.org/
+
 ```
 
 You can further adjust any sections as necessary to fit your project's needs!
