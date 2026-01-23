@@ -7,7 +7,7 @@ This pipeline performs Transcriptome-Wide Association Study (TWAS) to identify g
 - [Part 1: TWAS Analysis](#part-1-twas-analysis)
 - [Part 2: GWAS-eQTL Colocalization Analysis](#part-2-gwas-eqtl-colocalization-analysis)
 - [Software Requirements](#software-requirements)
-- [Interpretation Guide](#interpretation-guide)
+
 
 ---
 
