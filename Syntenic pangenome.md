@@ -1387,4 +1387,4 @@ print(f"\nComplete! Summary: {args.output}_summary_report.txt")
 
 ---
 
-**Last Updated:** January 2025
+**Last Updated:** January 2026
