@@ -461,4 +461,4 @@ We thank the developers of all open-source bioinformatics tools used in this pip
 
 ---
 
-**Last Updated:** January 2025
+**Last Updated:** January 2026
