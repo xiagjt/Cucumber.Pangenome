@@ -77,6 +77,4 @@ ragtag.py scaffold \
 | `CG110.ragtag.dir/ragtag.scaffold.fasta` | Final scaffolded genome (chromosome-level). |
 | `CG110.ragtag.dir/ragtag.scaffold.stats` | Statistics of the scaffolding process. |
 
----
 
-**Would you like me to add a section for quality assessment using BUSCO or QUAST to check the completeness of your assembly?**
