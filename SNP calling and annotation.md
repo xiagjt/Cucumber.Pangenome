@@ -516,5 +516,4 @@ awk 'NR>1 && $9=="nonsynonymous SNV"' prefix.CLv4_multianno.txt > nonsynonymous_
 
 ---
 
-**Last Updated:** January 2025
-**Version:** 1.0
+**Last Updated:** January 2026
