@@ -872,5 +872,5 @@ conda install -c bioconda pbsv pbmm2
 
 ---
 
-**Last Updated:** January 2025
-**Version:** 1.0
+**Last Updated:** January 2026
+
